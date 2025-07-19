@@ -13,19 +13,17 @@ load_dotenv()
 # Logging
 # ------------
 logger = logging.getLogger(__name__) 
-# logger.setLevel("DEBUG")
+logger.setLevel("DEBUG")
 
 # formatter
 fmt = logging.Formatter("%(asctime)s -- %(name)s -- %(levelname)s -- %(message)s")
 
-# handlers 
-# console_handler = logging.StreamHandler() 
+# handler
 file_handler = logging.FileHandler(filename= "multitools-server.log")
+file_handler.setFormatter(fmt)
 
-# add to logger 
-# logger.addHandler(console_handler) 
-logger.addHandler(file_handler.setFormatter(fmt))
-
+# add to logger
+logger.addHandler(file_handler)
 
 # -------------------------
 # Initiating FastMCP server 
@@ -74,7 +72,7 @@ TYPE_MAPPING = {
 # Available tools for LLM
 # -----------------------
 
-async def cricket_source(mode: str) -> str:
+async def cricket_source(mode: str, want: str) -> str:
     """Fetches whole html from source url then extracts html container that contains necessary details"""
 
     if mode == "live":
@@ -100,9 +98,19 @@ async def cricket_source(mode: str) -> str:
     if response:
         # convert htmldoc content to proper html form using bs
         html = BeautifulSoup(response.content, "html.parser")
+
         # find where the content is
-        content = html.find("div", class_= 'cb-col cb-col-100 cb-rank-tabs')
-        return json.dumps({'output': content})
+        container = html.find("div", class_= 'cb-col cb-col-100 cb-rank-tabs')
+        if mode in ['live', 'upcomming'] and want == "text":
+            text = container.get_text(separator=" ", strip= True) 
+            return json.dumps({"output": str(text)})    
+        elif mode == 'live' and want == 'herf':
+            herfs_list = container.find_all("a", class_ = "cb-text-link cb-mtch-lnks") 
+            herfs_string = ",".join(str(tag) for tag in herfs_list)
+            return json.dumps({"output": herfs_string})
+        else:
+            return json.dumps({"error": f"Not Implemented for {mode} with {want}"})
+        
     else:
         return json.dumps({"error": "No Available details right now!"})
 
@@ -112,26 +120,15 @@ async def fetch_live_cricket_details(mode: Literal["live", "upcomming"])-> str:
     Args:
         mode : Either "live" or "upcomming"
     """
+    response = await cricket_source(mode.strip().lower(), want= 'text')
+    return response
 
-    response = await cricket_source(mode.strip().lower())
-    data = json.loads(response)
-
-    if data['error']:
-        return response
-    live_details = data['content'].get_text(separator = "\n", strip = True)
-    return json.dumps({'output': str(live_details)}) 
 
 @mcp.tool()
 async def live_cricket_scorecard_herf()-> str:
-    """Returns string of comma separated anchor tags contains herf attributes that pointing to live cricket scorecards """
-
-    response = await cricket_source("live")
-    data = json.loads(response)
-    if data['error']:
-        return response
-    herfs_list = data["content"].find_all("a", class_ = "cb-text-link cb-mtch-lnks")      # here don't know is it possible
-    herfs_string = ",".join(str(tag) for tag in herfs_list)
-    return json.dumps({'output': herfs_string}) 
+    """String of comma separated anchor tags contains herf attributes that pointing to live cricket scorecards """
+    response = await cricket_source('live', 'herf')
+    return response
 
 
 @mcp.tool()
@@ -145,8 +142,8 @@ async def live_cricket_scorecard(herf: str)-> str:
     scorecard_url = f"{BASE_CRICKET_URL}{herf}"
 
     try:
-        with httpx.AsyncClient(timeout= 10.0) as client:
-            response = client.get(url = scorecard_url)
+        async with httpx.AsyncClient(timeout= 10.0) as client:
+            response = await client.get(url = scorecard_url)
             response.raise_for_status()
     except httpx.HTTPError as e:
         logger.error("\n%s", e) 
