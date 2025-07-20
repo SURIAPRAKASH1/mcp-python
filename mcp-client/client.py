@@ -54,7 +54,9 @@ class MCPClient():
             "input_schema": tool.inputSchema
         } for tool in self.tools]
 
-        print(json.dumps(available_tools))
+        # available tools in a json format 
+        Js = json.loads(json.dumps(available_tools))
+        print("Available Tools and it's Description: \n%s", Js)
 
     async def cleanup(self):
         """Destroy session"""
