@@ -1,43 +1,48 @@
-from mcp.server.fastmcp import FastMCP 
-import httpx 
-
+import logging, os, json, sys 
+from typing import Any, Literal, Optional 
 from pathlib import Path
 import subprocess
-from typing import Any, Literal, Optional
-from bs4 import BeautifulSoup
-import logging, os, json, sys
 from dotenv import load_dotenv
-load_dotenv()
+load_dotenv()  
 
 # -----------
 # Logging
 # ------------
-logger = logging.getLogger(__name__) 
-logger.setLevel("DEBUG")
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)
 
-# formatter
-fmt = logging.Formatter("%(asctime)s -- %(name)s -- %(levelname)s -- %(message)s")
+fmt = "%(asctime)s -- %(levelname)s -- %(name)s -- %(message)s"
+file_handler = logging.FileHandler("multitools-server.log")
+file_handler.setFormatter(logging.Formatter(fmt))
 
-# handler
-file_handler = logging.FileHandler(filename= "multitools-server.log")
-file_handler.setFormatter(fmt)
-
-# add to logger
 logger.addHandler(file_handler)
+
+# Now import neccessary Packages
+try:
+    from mcp.server.fastmcp import FastMCP
+    from bs4 import BeautifulSoup 
+    import httpx 
+except ImportError as e:
+    logger.error("Got Error when Importing Packages: \n%s", e) 
+    sys.exit(1) 
+except Exception as e:
+    logger.error("Got UnExcepted Error when Importing Packages: \n%s", e)
+    sys.exit(1)
 
 # -------------------------
 # Initiating FastMCP server 
 # -------------------------
 mcp = FastMCP("multitools-server") 
 
-
 # --------------
 # Configuration
 #---------------
-BASE_CRICKET_URL = os.environ.get("BASE_CRICKET_URI", "False")
+BASE_CRICKET_URL = os.environ.get("BASE_CRICKET_URL")
+logger.warning("Env variable BASE_CRICKET_URL Not-Found may cause error...") if not BASE_CRICKET_URL else logger.info("")
 
-# PR template directory (shared across all modules)
+# PR template directory 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
+logger.warning("TEMPLATES_DIR Not-Found may cause Error...") if not TEMPLATES_DIR else logger.info("TEMPLATES_DIR: \n%s", TEMPLATES_DIR)
 
 # Default PR templates
 DEFAULT_TEMPLATES = {
@@ -81,18 +86,15 @@ async def cricket_source(mode: str, want: str) -> str:
         url = f"{BASE_CRICKET_URL}/cricket-match/live-scores/upcoming-matches"
     else:
         error = f"Not Implemented: Currently there's no implementation to handle {mode}. Only handels live, upcomming"
-        logger.error(msg= error)
         return json.dumps({"error": error})
         
     try:
         async with httpx.AsyncClient(timeout= 10.0) as client:
             response = await client.get(url= url) 
-            response.raise_for_status()                    # if not 2xx it will raise HTTP error
+            response.raise_for_status()                    # if ain't 2xx it will raise HTTP error
     except httpx.HTTPError as e:
-        logger.error("\n%s", e) 
         return json.dumps({'error': str(e)})
     except Exception as e:
-        logger.error("\n%s", e) 
         return json.dumps({'error': str(e)})
 
     if response:
@@ -115,8 +117,8 @@ async def cricket_source(mode: str, want: str) -> str:
         return json.dumps({"error": "No Available details right now!"})
 
 @mcp.tool()
-async def fetch_live_cricket_details(mode: Literal["live", "upcomming"])-> str:
-    """ Get cricket live or upcomming match details
+async def fetch_cricket_details(mode: Literal["live", "upcomming"])-> str:
+    """ Get cricket Live or Upcomming match details
     Args:
         mode : Either "live" or "upcomming"
     """
@@ -137,7 +139,7 @@ async def live_cricket_scorecard(herf: str)-> str:
     (e.g, herf = "/live-cricket-scorecard/119495/cd-vs-hbh-7th-match-global-super-league-2025")
 
     Args:
-        herf (str): herf for scorescard endpoint
+        herf: live cricket match scorecard endpoint
     """
     scorecard_url = f"{BASE_CRICKET_URL}{herf}"
 
@@ -146,17 +148,15 @@ async def live_cricket_scorecard(herf: str)-> str:
             response = await client.get(url = scorecard_url)
             response.raise_for_status()
     except httpx.HTTPError as e:
-        logger.error("\n%s", e) 
         return json.dumps({"error": str(e)})
     except Exception as e:
-        logger.error("\n%s", e) 
         return json.dumps({'error': str(e)})
     
     # extract html container
     if response:
         html = BeautifulSoup(response.content, "html.parser")
         live_scorecard = html.find("div", timeout = "30000")
-        details = live_scorecard.get_text(separator="\n", strip=True)
+        details = live_scorecard.get_text(separator=" ", strip=True)
         return json.dumps({'output': str(details)})
     else:
         return json.dumps({'error': "No Available details right now"})
@@ -330,7 +330,5 @@ async def suggest_template(changes_summary: str, change_type: str) -> str:
     return json.dumps(suggestion, indent=2)
 
 if __name__ == "__main__":
-    print("multitools-server is running 🚀🚀🚀", file = sys.stderr)
+    logger.info("multitools-server is started 🚀🚀🚀")
     mcp.run(transport = 'stdio')
-
-    
