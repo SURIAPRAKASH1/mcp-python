@@ -7,6 +7,7 @@ requires-python = ">=3.12"
 dependencies = [
     "asyncio>=3.4.3",
     "bs4>=0.0.2",
+    "gradio[mcp]>=5.30.0",
     "httpx>=0.28.1",
     "mcp>=1.12.0",
 ]
