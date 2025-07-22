@@ -6,7 +6,11 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp import Tool
 
 from typing import List, Optional
-import sys, json
+import sys, json, os
+from dotenv import load_dotenv
+load_dotenv() 
+
+LLM_API_URL = os.environ.get("LLM_API_URL", "False")
 
 class MCPClient():
     """ MCPClient: Client that will connect to MCP server and performers client-server communication"""
@@ -44,19 +48,78 @@ class MCPClient():
         response = await self.session.list_tools()
         self.tools: List[Tool]  = response.tools
         print("\nConnected to server with tools:", [tool.name for tool in self.tools])
+        print(" ")
 
     async def process_query(self, query: str) -> str:
         """Process a query using LLM and available tools"""
        
+        messages = [{
+            "role": "user", 
+            "content": query or "Yo what's up bro"
+        }]
+
         available_tools = [{
             "name": tool.name,
             "description": tool.description,
             "input_schema": tool.inputSchema
         } for tool in self.tools]
 
-        # available tools in a json format 
-        Js = json.loads(json.dumps(available_tools))
-        print("Available Tools and it's Description: \n%s", Js)
+        gemma3n_uri = f"{LLM_API_URL}/gemma3n"
+        headers = {"user-agent": "mcp-client/0.0.1","content-type": "application/json"}
+
+        async with httpx.AsyncClient(timeout= 10.0) as client:
+            try:
+                to_llm_context = {"messages": messages, "tools": available_tools}
+                llm_response = await client.post(url = gemma3n_uri, headers= headers, json= to_llm_context)
+                llm_response.raise_for_status()            
+            except httpx.HTTPStatusError as exc:
+                raise f"Error Response {exc.response.status_code} while requesting {exc.request.url}"
+            except httpx.RequestError as exc:
+                raise f"Error while requesting {exc.request.url}"
+            except Exception as exc:
+                raise f"Unexpected Error when Accesssing LLM API: \n {exc}"
+
+        final_text = []
+        assistant_message_context = []
+        response = llm_response.get('message')
+
+        if response['content']:                       
+            final_text.append(response['content'])
+            assistant_message_context.append(response['content'])
+        elif response['tool_calls']:
+
+            for tool_call in response['tool_calls']:
+                function_name, function_args = tool_call['function'].get('name'), tool_call['function'].get("arguments")
+
+                # Execute tool call
+                result = self.session.call_tool(function_name, function_args)
+                print(f"Calling tool {function_name} with arguments {function_args}")
+                
+                messages.append({
+                    'role': "assistant",
+                    'content': tool_call['function']
+                
+                }) 
+                # add tool result to LLM's context
+                messages.append({
+                    "role": "tool",
+                    "content": result.content
+                })
+
+                # again invoke LLM 
+                async with httpx.AsyncClient(timeout= 10.0) as client:
+                    try:
+                        to_llm_context = {"messages": messages, "tools": available_tools}
+                        llm_response = await client.post(url = gemma3n_uri, headers= headers, json= to_llm_context)
+                        llm_response.raise_for_status()            
+                    except httpx.HTTPStatusError as exc:
+                        raise f"Error Response {exc.response.status_code} while requesting {exc.request.url}"
+                    except httpx.RequestError as exc:
+                        raise f"Error whild requesting {exc.request.url}"
+                    except Exception as exc:
+                        raise f"Unexpected Error when Accesssing LLM API: \n {exc}"
+                
+                final_text.append(llm_response['message'].get("content"))
 
     async def cleanup(self):
         """Destroy session"""
