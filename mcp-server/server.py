@@ -330,5 +330,10 @@ async def suggest_template(changes_summary: str, change_type: str) -> str:
     return json.dumps(suggestion, indent=2)
 
 if __name__ == "__main__":
-    logger.info("multitools-server is started 🚀🚀🚀")
-    mcp.run(transport = 'stdio')
+
+    transport = "stdio"
+    if transport != "streamable-http":
+        logger.info("multitools-server is started 🚀🚀🚀")
+    else:
+        print("multitools-server is started 🚀🚀🚀")
+    mcp.run(transport = transport)
