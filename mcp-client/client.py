@@ -4,13 +4,15 @@ from contextlib import AsyncExitStack
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp import Tool
+import gradio as gr
 
-from typing import List, Optional
+from typing import List, Optional, Any
+import random
 import sys, json, os
 from dotenv import load_dotenv
 load_dotenv() 
 
-LLM_API_URL = os.environ.get("LLM_API_URL", "False")
+GEMMA3N_URI = os.environ.get("GEMMA3N_URI", "False")
 
 class MCPClient():
     """ MCPClient: Client that will connect to MCP server and performers client-server communication"""
@@ -50,13 +52,15 @@ class MCPClient():
         print("\nConnected to server with tools:", [tool.name for tool in self.tools])
         print(" ")
 
-    async def process_query(self, query: str) -> str:
-        """Process a query using LLM and available tools"""
-       
-        messages = [{
-            "role": "user", 
-            "content": query or "Yo what's up bro"
-        }]
+
+    async def process_query(self, message: str, history: list[dict[str, Any]]) -> str:
+        """Process a query using LLM and available tools
+        Args:
+            messages: Current query from an user
+            history: All conversation between User & Assistant
+        """
+
+        messages = self.prepare_chat_messages(message, history)
 
         available_tools = [{
             "name": tool.name,
@@ -64,13 +68,12 @@ class MCPClient():
             "input_schema": tool.inputSchema
         } for tool in self.tools]
 
-        gemma3n_uri = f"{LLM_API_URL}/gemma3n"
         headers = {"user-agent": "mcp-client/0.0.1","content-type": "application/json"}
 
         async with httpx.AsyncClient(timeout= 10.0) as client:
             try:
                 to_llm_context = {"messages": messages, "tools": available_tools}
-                llm_response = await client.post(url = gemma3n_uri, headers= headers, json= to_llm_context)
+                llm_response = await client.post(url = GEMMA3N_URI, headers= headers, json= to_llm_context)
                 llm_response.raise_for_status()            
             except httpx.HTTPStatusError as exc:
                 raise f"Error Response {exc.response.status_code} while requesting {exc.request.url}"
@@ -110,7 +113,7 @@ class MCPClient():
                 async with httpx.AsyncClient(timeout= 10.0) as client:
                     try:
                         to_llm_context = {"messages": messages, "tools": available_tools}
-                        llm_response = await client.post(url = gemma3n_uri, headers= headers, json= to_llm_context)
+                        llm_response = await client.post(url = GEMMA3N_URI, headers= headers, json= to_llm_context)
                         llm_response.raise_for_status()            
                     except httpx.HTTPStatusError as exc:
                         raise f"Error Response {exc.response.status_code} while requesting {exc.request.url}"
@@ -121,10 +124,28 @@ class MCPClient():
                 
                 final_text.append(llm_response['message'].get("content"))
 
+            return "\n".join(text for text in final_text)
+
+    def prepare_chat_messages(self, message: str, history: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        """Prepares User and Assistant chat history in a structure way"""
+
+        # History of user - assistant chat
+        messages = []
+        if history:
+            # go through all conversation extract user & assistant 
+            for hist in history:
+                if hist.get("role") == "user":
+                    messages.append({"role": "user", "content": hist.get("content")})
+                elif hist.get("role") == "assistant":
+                    messages.append({"role": "assistant", "content": hist.get("content")})
+
+        # finaly append current user query to messages
+        messages.append({"role": "user", "content": message})
+        return messages
+
     async def cleanup(self):
         """Destroy session"""
         await self.exit_stack.aclose()
-
 
 async def main():
     if len(sys.argv) < 2:
@@ -134,9 +155,19 @@ async def main():
     client = MCPClient()
     try:
         await client.connect_to_server(sys.argv[1])
-        await client.process_query("none")
+        # await client.process_query("none")
+        gr.ChatInterface(
+            fn= client.process_query, 
+            type = "messages", 
+            chatbot= gr.Chatbot(height= 500),
+        ).launch(
+            debug = True, 
+        )        
+
     finally:
         await client.cleanup()
 
+
 if __name__ == "__main__":
     asyncio.run(main())
+
