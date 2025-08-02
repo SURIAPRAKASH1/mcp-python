@@ -4,7 +4,8 @@ from contextlib import AsyncExitStack
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 from mcp.client.streamable_http import streamablehttp_client
-from mcp import Tool
+from mcp.client.sse import sse_client
+from mcp.types import Tool, Prompt
 import gradio as gr
 
 from typing import List, Optional, Any, Union
@@ -13,7 +14,8 @@ from dotenv import load_dotenv
 load_dotenv() 
 
 GEMMA3N_URI = os.environ.get("GEMMA3N_URI", "False")
-STREAMABLEHTTP_URI = os.environ.get("STREAMABLEHTTP_URI", "False")
+STREAMABLEHTTP_SERVER_URI = os.environ.get("STREAMABLEHTTP_SERVER_URI", "False")
+SSE_SERVER_URI = os.environ.get("SSE_SERVER_URI", "False")
 
 class MCPClient():
     """ MCPClient: Client that will connect to MCP server and performers MCP Protocals"""
@@ -53,13 +55,13 @@ class MCPClient():
         print("\nConnected to stdio server with tools:", [tool.name for tool in self.tools])
         print(" ")
 
-    async def connect_to_streamablehttp_server(self, streamablehttp_uri: str)-> None:
-        """Connect to streamablehttp MCP server
+    async def connect_to_streamablehttp_server(self, streamablehttp_server_uri: str)-> None:
+        """Connect to an streamablehttp MCP server
 
         Args:
-            streamablehttp_uri: URI to where streamablehttp server is running (/mcp)
+            streamablehttp_server_uri: URI to where streamablehttp server is running (e.g, /mcp)
         """
-        streamablehttp_transport = await self.exit_stack.enter_async_context(streamablehttp_client(url = streamablehttp_uri)) 
+        streamablehttp_transport = await self.exit_stack.enter_async_context(streamablehttp_client(url = streamablehttp_server_uri)) 
         read, write, _ = streamablehttp_transport
         self.session = await self.exit_stack.enter_async_context(ClientSession(read, write)) 
 
@@ -70,9 +72,33 @@ class MCPClient():
         self.tools: List[Tool] = response.tools 
         print("\nConnected to streamablehttp server with tools: ", [tool.name for tool in self.tools])
         print(" ")
-       
+    
+    async def connect_to_sse_server(self, sse_server_uri: str) -> None:
+        """Connect to an sse MCP server. This implementation is to only handle gradio. Cause when i was implementing gradio didn't advance to streamable-http. 
+
+        Args:
+            sse_server_uri: URI to where see server is running (e.g, mcp/see)
+        """
+        sse_transport = await self.exit_stack.enter_async_context(sse_client(url = sse_server_uri)) 
+        read, write = sse_transport 
+        self.session = await self.exit_stack.enter_async_context(ClientSession(read, write)) 
+
+        await self.session.initialize() 
+
+        # List available tools 
+        tool_response = await self.session.list_tools() 
+        # List available prompts 
+        prompt_response = await self.session.list_prompts() 
+
+        self.tools: List[Tool] = tool_response.tools 
+        self.prompts: List[Prompt] = prompt_response.prompts
+        print(f"\nConnected to sse server with \ntools: {[tool.name for tool in self.tools]} \nprompts: {[prompt.name for prompt in self.prompts]}")
+        print(" ")
+        
+
     async def process_query(self, message: str, history: list[dict[str, Any]]) -> str:
         """Process a query using LLM and available tools
+
         Args:
             messages: Current query from an user
             history: All conversation between User & Assistant
@@ -169,16 +195,19 @@ async def main():
     
     is_stdio_server = True
     is_streamablehttp_server = True 
+    is_sse_server = True 
 
     if len(sys.argv) < 2:
         is_stdio_server = False
-    if STREAMABLEHTTP_URI == "False":
+    if STREAMABLEHTTP_SERVER_URI == "False":
         is_streamablehttp_server = False
+    if SSE_SERVER_URI == "False":
+        is_sse_server = False 
 
-    if not (is_stdio_server or is_streamablehttp_server):
+    if not (is_stdio_server or is_streamablehttp_server or is_sse_server):
         print("Usage: python client.py <path to your server script>")
         print("OR")
-        print("Set env variable STREAMABLE_HTTP_URI = <uri to your server>")
+        print("Set env variable STREAMABLEHTTP_SERVER_URI or SEE_SERVER_URI = <uri to your server>")
         sys.exit(1)
 
     client = MCPClient()
@@ -187,7 +216,9 @@ async def main():
         if is_stdio_server:
             await client.connect_to_stdio_server(sys.argv[1]) 
         elif is_streamablehttp_server:
-            await client.connect_to_streamablehttp_server(STREAMABLEHTTP_URI)
+            await client.connect_to_streamablehttp_server(STREAMABLEHTTP_SERVER_URI)
+        elif is_sse_server:
+            await client.connect_to_sse_server(SSE_SERVER_URI)
     
         gr.ChatInterface(
             fn= client.process_query, 
