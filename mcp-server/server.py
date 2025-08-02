@@ -3,6 +3,7 @@ from typing import Any, Literal, Optional
 from pathlib import Path
 import subprocess
 from dotenv import load_dotenv
+import argparse
 load_dotenv()  
 
 # -----------
@@ -330,10 +331,13 @@ async def suggest_template(changes_summary: str, change_type: str) -> str:
     return json.dumps(suggestion, indent=2)
 
 if __name__ == "__main__":
+    # Argument parser to handle CLI args
+    parser = argparse.ArgumentParser() 
 
-    transport = "stdio"
-    if transport != "streamable-http":
-        logger.info("multitools-server is started 🚀🚀🚀")
-    else:
-        print("multitools-server is started 🚀🚀🚀")
+    parser.add_argument("--transport", type= str, help= "Which transport type do you want to run mcp server?. Controlled by --transport cli arg OR TRANSPORT env. If didn't provide either of those default to stdio.") 
+    args = parser.parse_args() 
+
+    transport = args.transport or os.environ.get("TRANSPORT") or "stdio"
+    
+    logger.info(f"multitools-server is started in {transport} transport 🚀🚀🚀")
     mcp.run(transport = transport)
