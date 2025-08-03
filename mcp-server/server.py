@@ -6,9 +6,10 @@ from dotenv import load_dotenv
 import argparse
 load_dotenv()  
 
-# -----------
-# Logging
-# ------------
+# -------------
+# Logging: logging + stdio = ✅, print + stdio = ❌ 
+# -------------
+
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 
@@ -18,7 +19,7 @@ file_handler.setFormatter(logging.Formatter(fmt))
 
 logger.addHandler(file_handler)
 
-# Now import neccessary Packages
+# Now import neccessary Packages. Sanity checks for libraries cause connecting mcp-client to mcp-server via stdio, client launches mcp-server as subprocess so client uses it's env libraries. If we use different env like in this case, client will invoke connection closed error and never gives any clue what's went wrong that's frustrating 😞.
 try:
     from mcp.server.fastmcp import FastMCP
     from bs4 import BeautifulSoup 
@@ -75,7 +76,7 @@ TYPE_MAPPING = {
 
 
 # ----------------------
-# Available tools for LLM
+# Available tools|resources|prompts|sampling for LLM
 # -----------------------
 
 async def cricket_source(mode: str, want: str) -> str:
@@ -116,6 +117,7 @@ async def cricket_source(mode: str, want: str) -> str:
         
     else:
         return json.dumps({"error": "No Available details right now!"})
+
 
 @mcp.tool()
 async def fetch_cricket_details(mode: Literal["live", "upcomming"])-> str:
@@ -284,7 +286,6 @@ async def analyze_file_changes(
         return json.dumps({"error": str(e)})
   
 
-
 @mcp.tool()
 async def get_pr_templates() -> str:
     """List available PR templates with their content."""
@@ -298,7 +299,6 @@ async def get_pr_templates() -> str:
     ]
     
     return json.dumps(templates, indent=2)
-
 
 
 @mcp.tool()
@@ -330,14 +330,15 @@ async def suggest_template(changes_summary: str, change_type: str) -> str:
     
     return json.dumps(suggestion, indent=2)
 
+
 if __name__ == "__main__":
     # Argument parser to handle CLI args
     parser = argparse.ArgumentParser() 
 
-    parser.add_argument("--transport", type= str, help= "Which transport type do you want to run mcp server?. Controlled by --transport cli arg OR TRANSPORT env. If didn't provide either of those default to stdio.") 
+    parser.add_argument("--transport", type= str, default = "stdio", help= "Which transport type do you want to run mcp server?. Controlled by --transport cli arg OR TRANSPORT env. If didn't provide either of those default to stdio.") 
     args = parser.parse_args() 
 
-    transport = args.transport or os.environ.get("TRANSPORT") or "stdio"
+    transport = os.environ.get("TRANSPORT") or args.transport
     
-    logger.info(f"multitools-server is started in {transport} transport 🚀🚀🚀")
+    logger.info(f"multitools-server is started via {transport} transport")
     mcp.run(transport = transport)
