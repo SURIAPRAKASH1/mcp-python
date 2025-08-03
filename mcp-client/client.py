@@ -191,6 +191,7 @@ class MCPClient():
         """Destroy session"""
         await self.exit_stack.aclose()
 
+
 async def main():
     
     is_stdio_server = True
@@ -207,7 +208,7 @@ async def main():
     if not (is_stdio_server or is_streamablehttp_server or is_sse_server):
         print("Usage: python client.py <path to your server script>")
         print("OR")
-        print("Set env variable STREAMABLEHTTP_SERVER_URI or SEE_SERVER_URI = <uri to your server>")
+        print("Set env variable STREAMABLEHTTP_SERVER_URI or SSE_SERVER_URI = <uri to your server>")
         sys.exit(1)
 
     client = MCPClient()
@@ -232,5 +233,5 @@ async def main():
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+   asyncio.run(main())
 
