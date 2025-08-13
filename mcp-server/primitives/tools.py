@@ -13,6 +13,7 @@ try:
     from bs4 import BeautifulSoup 
     import httpx 
     import gradio as gr
+    import asyncio
 except ImportError as e:
     logger.error("Got Error when Importing Packages: \n%s", e) 
     sys.exit(1) 
@@ -64,7 +65,7 @@ TYPE_MAPPING = {
 # -----------------
 
 async def cricket_source(
-    mode: Literal["live", "upcomming"], want: Literal["text", "herf"] ) -> str:
+    mode: Literal["live", "upcoming"], want: Literal["text", "href"] ) -> str:
     """Fetches whole html from source extracts html container that contains necessary details
     
     Args:
@@ -74,10 +75,10 @@ async def cricket_source(
 
     if mode == "live":
         url = f"{BASE_CRICKET_URL}/cricket-match/live-scores"
-    elif mode == 'upcomming':
+    elif mode == 'upcoming':
         url = f"{BASE_CRICKET_URL}/cricket-match/live-scores/upcoming-matches"
     else:
-        error = f"Not Implemented: Currently there's no implementation to handle {mode}. Only handels live, upcomming"
+        error = f"Not Implemented: Currently there's no implementation to handle {mode}. Only handels live, upcoming"
         return json.dumps({"error": error})
         
     try:
@@ -95,13 +96,13 @@ async def cricket_source(
 
         # find where the content is
         container = html.find("div", class_= 'cb-col cb-col-100 cb-rank-tabs')
-        if mode in ['live', 'upcomming'] and want == "text":
+        if mode in ['live', 'upcoming'] and want == "text":
             text = container.get_text(separator=" ", strip= True) 
             return json.dumps({f"{mode} details": str(text)})    
-        elif mode == 'live' and want == 'herf':
-            herfs_list = container.find_all("a", class_ = "cb-text-link cb-mtch-lnks") 
-            herfs_string = ",".join(str(tag) for tag in herfs_list)
-            return json.dumps({"herfs_strings": herfs_string})
+        elif mode == 'live' and want == 'href':
+            hrefs_list = container.find_all("a", class_ = "cb-text-link cb-mtch-lnks") 
+            hrefs_string = ",".join(str(tag) for tag in hrefs_list)
+            return json.dumps({"hrefs_strings": hrefs_string})
         else:
             return json.dumps({"error": f"Not Implemented for {mode} with {want}"})
         
@@ -109,30 +110,30 @@ async def cricket_source(
         return json.dumps({"error": "No Available details right now!"})
 
 
-async def fetch_cricket_details(mode: Literal["live", "upcomming"])-> str:
+async def fetch_cricket_details(mode: Literal["live", "upcoming"])-> str:
     """Get cricket Live or Upcomming match details
 
     Args:
-        mode : Either "live" or "upcomming"
+        mode : Either "live" or "upcoming"
     """
     response = await cricket_source(mode.strip().lower(), want= 'text')
     return response
 
 
-async def live_cricket_scorecard_herf()-> str:
-    """String of comma separated anchor tags with herf attributes that pointing to live cricket scorecards """
-    response = await cricket_source('live', 'herf')
+async def live_cricket_scorecard_href()-> str:
+    """String of comma separated anchor tags with href attributes that pointing to live cricket scorecards """
+    response = await cricket_source('live', 'href')
     return response
 
 
-async def live_cricket_scorecard(herf: str)-> str:
+async def live_cricket_scorecard(href: str)-> str:
     """Get Live cricket match scorecard details.
-    (e.g, herf = "/live-cricket-scorecard/119495/cd-vs-hbh-7th-match-global-super-league-2025")
+    (e.g, href = "/live-cricket-scorecard/119495/cd-vs-hbh-7th-match-global-super-league-2025")
 
     Args:
-        herf: live cricket match scorecard endpoint
+        href: live cricket match scorecard endpoint
     """
-    scorecard_url = f"{BASE_CRICKET_URL}{herf}"
+    scorecard_url = f"{BASE_CRICKET_URL}{href}"
 
     try:
         async with httpx.AsyncClient(timeout= 10.0) as client:
@@ -183,7 +184,10 @@ async def analyze_file_changes(
         # Get list of changed files
         files_result = subprocess.run(
             ["git", "diff", "--name-status", f"{base_branch}...HEAD"],
-            capture_output=True,
+            stdin= subprocess.DEVNULL, 
+            stdout= subprocess.PIPE, 
+            stderr = subprocess.PIPE,
+            # capture_output=True,
             text=True,
             check=True,
             cwd=cwd
@@ -192,7 +196,10 @@ async def analyze_file_changes(
         # Get diff statistics
         stat_result = subprocess.run(
             ["git", "diff", "--stat", f"{base_branch}...HEAD"],
-            capture_output=True,
+            stdin= subprocess.DEVNULL, 
+            stdout= subprocess.PIPE, 
+            stderr = subprocess.PIPE,
+            # capture_output=True,
             text=True,
             cwd=cwd
         )
@@ -203,7 +210,10 @@ async def analyze_file_changes(
         if include_diff:
             diff_result = subprocess.run(
                 ["git", "diff", f"{base_branch}...HEAD"],
-                capture_output=True,
+                stdin= subprocess.DEVNULL, 
+                stdout= subprocess.PIPE, 
+                stderr = subprocess.PIPE,
+                # capture_output=True,
                 text=True,
                 cwd=cwd
             )
@@ -219,8 +229,11 @@ async def analyze_file_changes(
         
         # Get commit messages for context
         commits_result = subprocess.run(
-            ["git", "log", "--oneline", f"{base_branch}..HEAD"],
-            capture_output=True,
+            ["git", "log", "--oneline", f"{base_branch}..HEAD"], 
+            stdin= subprocess.DEVNULL, 
+            stdout= subprocess.PIPE, 
+            stderr = subprocess.PIPE,
+                # capture_output=True,
             text=True,
             cwd=cwd
         )
@@ -293,13 +306,13 @@ TOOL_COMPONENTS = {
     },
     "fetch_cricket_details": {
         "is_gradio_api": False, 
-        "inputs": gr.Radio(["live", "upcomming"], label="Mode"),
+        "inputs": gr.Radio(["live", "upcoming"], label="Mode"),
         "outputs": gr.JSON(label= "Details"), 
     },
-    "live_cricket_scorecard_herf": {
+    "live_cricket_scorecard_href": {
         "is_gradio_api": False, 
         "inputs": None, 
-        "outputs": gr.JSON(label = 'Scorecard Herfs')
+        "outputs": gr.JSON(label = 'Scorecard hrefs')
     },
     "live_cricket_scorecard": {
         "is_gradio_api": True,    
