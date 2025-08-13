@@ -1,5 +1,5 @@
 import os
-from typing import Literal, Optional, List, Any
+from typing import Literal, Optional, List, Any, Callable, Dict
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -41,16 +41,16 @@ class Chat:
         else:
             raise NotImplementedError(self.plateform)
         
-    async def google(self, 
-               session: ClientSession,
+    def google(self, 
+               call_tool: Callable[[Dict, Optional[float]], Dict],
                tool_model: str,
                response_model: Optional[str],
                messages: List[dict[str, Any]], 
                tools: List[dict[str, Any]]) -> str:
-        """Processing messages and tools via Google
+        """Processing messages and tools via Google Models.
 
         Args:
-            session: MCP ClientSession.
+            call_mcp_method: Function utilization for mcp methods.
             tool_model: Google's (gemini/gemma) model Name that has tool calling functionality.
             response_model: If response_model (may not have tool calling functionality) Name is given then tool_model and response used to ans query.
             messages: All conversations in openai style format.
@@ -95,10 +95,12 @@ class Chat:
         final_text = [] 
         function_response_parts = []
 
+        # It's ain't good approach to handle text will be sometime's CoT
+        # On that cause model will use tools as well that's why 2 if. 
         if response.text:                                      # if model reponsed with it's knowledge
             final_text.append(response.text) 
-            contents.append(response.candidates[0].content)    # it usually don't need but for sanity
-        elif response.function_calls:                          # True even for single function call 
+            # contents.append(response.candidates[0].content)    # it usually don't need but for sanity
+        if response.function_calls:                          # True even for single function call 
             contents.append(response.candidates[0].content)    # send back what model does
 
             # Process each function calls as model requested
@@ -106,14 +108,15 @@ class Chat:
                 tool_name = fn.name
                 tool_args = fn.args 
 
-                # Exceute tool call
+                # Execute tool call
                 print(f"Calling function {tool_name} with args {tool_args}")
-                result = await session.call_tool(name = tool_name, arguments= tool_args) 
-                print(f"tool call response format : \n{result}")
+                tool_call_response = call_tool(params = {"tool_name": tool_name, "arguments": tool_args}, timeout = 30)
+                if tool_call_response['error']:
+                    return  f"❌ Error When calling tool {tool_name} with arguments {tool_args}: \n{tool_call_response}"
                 # Wrap it as a Part so the LLM can later consume it
                 part = types.Part.from_function_response(
                     name= tool_name,
-                    response={"result": result.content}
+                    response= tool_call_response["result"]
                 )
                 function_response_parts.append(part)
 
@@ -128,7 +131,7 @@ class Chat:
             # Again invoke model with results of function
             final_response = self.client.models.generate_content(
                 model = response_model or tool_model , 
-                config = config, 
+                # config = config, 
                 contents = contents
             )
 
