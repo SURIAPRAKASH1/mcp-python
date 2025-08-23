@@ -36,13 +36,13 @@ def google_definition(mcp_definition: dict) -> dict:
     
 
 def huggingface_definition(mcp_definition: dict) -> dict:
-    """Converts a tool definition from MCP's default to HuggingfaceHub models
+    """Converts a tool definition from MCP's default to compatible with HuggingfaceHub models
 
     Args:
         mcp_definition: MCP's default tool definition.
     """
 
-    hfd = {
+    hug_def = {
         "type": "function",
         "function": {
             "name": mcp_definition.get("name"),
@@ -59,5 +59,48 @@ def huggingface_definition(mcp_definition: dict) -> dict:
     properties = input_schema.get("properties", {})
 
     for prop_name, prop_details in properties.items():
-        hfd["function"]["parameters"]["properties"][prop_name] = prop_details
-        hfd["function"]["parameters"]["required"].append(prop_name)
+        hug_def["function"]["parameters"]["properties"][prop_name] = prop_details
+        hug_def["function"]["parameters"]["required"].append(prop_name)
+
+    return hug_def
+
+def custom_definition(mcp_definition: dict)-> dict:
+    """Converts a tool definition from MCP's default to compatible with Custom model running on notebook
+
+    Args:
+        mcp_definition: MCP's default tool definition.
+    """
+    
+    cus_def = {
+        "type": "function",
+        "function": {
+            "name": mcp_definition.get("name"),
+            "description": mcp_definition.get("description"),
+            "parameters": {
+                "type": "object",
+                "properties": {},
+                "required": []
+            }
+        }
+    }
+
+    # Handle enum
+    prop_details_enum = {
+        "type": [],
+        "description": ""
+    }
+    
+    input_schema = mcp_definition.get("input_schema", {})
+    properties = input_schema.get("properties", {})
+
+    for prop_name, prop_details in properties.items():
+        # Argument is enum -> changing type to hold enum's 
+        if prop_details["enum"]:
+            prop_details_enum["type"] = prop_details["enum"]
+            prop_details_enum["description"] = prop_details["description"]    
+            prop_details = prop_details_enum
+
+        cus_def["function"]["parameters"]["properties"][prop_name] = prop_details
+        cus_def["function"]["parameters"]["required"].append(prop_name)
+
+    return cus_def
