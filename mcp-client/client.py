@@ -1,6 +1,7 @@
 import os, sys, time, logging, signal, threading, queue, argparse
 from typing import Optional, Dict, Any, List, Literal, get_args
 from functools import partial
+import inspect
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -78,7 +79,7 @@ class MCPClientManager:
         self.mcp_thread.start()
         
         # Wait for client to be ready (with timeout)
-        if not self.client_ready.wait(timeout=30):
+        if not self.client_ready.wait(timeout= 40):
             raise TimeoutError("MCP client failed to initialize within 30 seconds")
         
         logger.info("MCP client started and ready")
@@ -375,7 +376,7 @@ class GradioManager:
         except Exception as e:
             return f"❌ Connection failed: {str(e)}"
 
-    def _handle_user_messages(self, message: str, history: List[Dict[str, Any]]) -> str:
+    async def _handle_user_messages(self, message: str, history: List[Dict[str, Any]]):
         """Handle user input via LLM and communicate with MCP client.
         
         Args:
@@ -383,35 +384,76 @@ class GradioManager:
             history: All conversation between User & Assistant.
         """
         if not self.state.mcp_manager:
-            return "⚠️ No MCP server connection. Please connect first."
+            yield "⚠️ No MCP server connection. Please connect first."
+            return
         
         if not message.strip():
-            return "❌ message is empty. Ask something to starting the conversation !"
-    
+            yield "❌ message is empty. Ask something to starting the conversation !"
+            return
+        print(message, history)
         try:
-            response = self.list_tools(timeout= 15) 
+            response = await asyncio.to_thread(self.list_tools, timeout = 15)
             if response['error']:
-                return f"❌ Error: {response['error']}"
+                yield f"❌ Error: {response['error']}"
+                return
 
             # Defualt Structuring
             messages = Structure.prepare_chat_messages(message, history)
             tools = Structure.prepare_default_tool_definition(response["result"])
 
             if not tools:
-                return "✅ MCP server connected, but no tools available."
+                yield "✅ MCP server connected, but no tools available."
+                return
             
             # Process query and tools via Custom implementation for Google's Models
-            llm_response = Chat("google").google(self.call_tool,
-                                                tool_model="gemini-2.0-flash-lite",
-                                                response_model= "gemma-3n-e4b-it", 
-                                                messages= messages, 
-                                                tools= tools
-                                            )
-            return llm_response
+            # llm_response = Chat("google").google(self.call_tool,
+            #                                     tool_model="gemini-2.0-flash-lite",
+            #                                     response_model= "gemma-3n-e4b-it", 
+            #                                     messages= messages, 
+            #                                     tools= tools
+            #                                 )
+            # return llm_response      
+                    
+            llm_obj = Chat("notebook").custom(
+                call_tool= self.call_tool, 
+                messages= messages, 
+                tools = tools, 
+            )
+
+            # yield chunk will stored; every time gradio renders concatenated chunks
+            messages.append({"role":"assistant", "content": ""}) 
+
+            # CASE A. async generator -> iterate and yield
+            if inspect.isasyncgen(llm_obj):
+                async for item in llm_obj:
+                    if isinstance(item, tuple) and len(item) == 2:
+                        chunk, current_channel = item
+                    else:
+                        chunk = item
+                    messages[-1]["content"] += (chunk or "")
+                    yield messages[-1]["content"]
+            # CASE B. coroutine -> awaitable to get return result
+            else:
+                if inspect.iscoroutine(llm_obj):
+                    res = await llm_obj
+                else:
+                    # CASE C. Just synchronous -> run in thread to avoid blocking eventloop
+                    res = await asyncio.to_thread(llm_obj)
+
+                # interpret result
+                if isinstance(res, tuple) and len(res) == 2:
+                    text, channel = res
+                    final_text = text or f"channel {channel}"
+                else:
+                    final_text = str(res)
+                messages[-1]["content"] += (final_text or "")
+                yield messages[-1]["content"]
+
             
         except Exception as e:
             logger.error(f"Error in Gradio handler: {e}")
-            return f"❌ Unexpected error: {str(e)}"
+            yield f"❌ Unexpected error: {str(e)}"
+            return
 
     def create_gradio_interface(self):
         """Create the Gradio interface with proper error handling."""
