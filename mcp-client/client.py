@@ -498,7 +498,6 @@ class GradioManager:
         "Disable the Button and shows connecting message"
         return gr.Button(interactive= False ,value= "Connecting ...") 
 
-    
     def _enable_button(self):
         "Enable the Button and resets the text"
         return gr.Button(interactive= True, value= "Connect")
