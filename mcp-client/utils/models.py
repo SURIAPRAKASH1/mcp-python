@@ -288,7 +288,7 @@ class Chat:
             yield f"❌ Unexpected error: {exc}"
             return
 
-        # have to process tool calls and then invoke model again for final ans
+        # Have to process tool calls and then invoke model again for final ans
         if tool_calls:
             for tool in tool_calls:
                 tool_name = tool["name"]

@@ -80,7 +80,7 @@ class MCPClientManager:
         
         # Wait for client to be ready (with timeout)
         if not self.client_ready.wait(timeout= 40):
-            raise TimeoutError("MCP client failed to initialize within 30 seconds")
+            raise TimeoutError("MCP client failed to initialize within 40 seconds")
         
         logger.info("MCP client started and ready")
     
@@ -390,7 +390,7 @@ class GradioManager:
         if not message.strip():
             yield "❌ message is empty. Ask something to starting the conversation !"
             return
-        print(message, history)
+        
         try:
             response = await asyncio.to_thread(self.list_tools, timeout = 15)
             if response['error']:
@@ -420,18 +420,63 @@ class GradioManager:
                 tools = tools, 
             )
 
-            # yield chunk will stored; every time gradio renders concatenated chunks
-            messages.append({"role":"assistant", "content": ""}) 
-
             # CASE A. async generator -> iterate and yield
+            current_reasoning = ""
+            accumulated_response = ""
+            final_reasoning: Optional[gr.ChatMessage] = None
+
             if inspect.isasyncgen(llm_obj):
                 async for item in llm_obj:
                     if isinstance(item, tuple) and len(item) == 2:
-                        chunk, current_channel = item
+                        chunk, channel = item
                     else:
-                        chunk = item
-                    messages[-1]["content"] += (chunk or "")
-                    yield messages[-1]["content"]
+                        chunk, channel = item, None
+                    chunk = chunk or ""
+
+                    # Phase 1: Analysis -> LLM's CoT
+                    if channel == "analysis":
+                        current_reasoning += chunk
+                        reasoning_msg = gr.ChatMessage(
+                            role="assistant",
+                            content= current_reasoning,
+                            metadata={"title": "🧠 Reasoning Process", "status": "pending"}
+                        )
+                        yield reasoning_msg
+                        time.sleep(0.5)
+
+                    # Phase 2: Final channel
+                    elif channel == "final":
+                        accumulated_response += chunk
+
+                        # Add a completion note to reasoning
+                        if current_reasoning:
+                            if final_reasoning is None:
+                                current_reasoning += "\n✅ Analysis complete! Generating response..."
+                                final_reasoning = gr.ChatMessage(
+                                    role="assistant",
+                                    content=current_reasoning,
+                                    metadata={"title": "🧠 Reasoning Process", "status": "done"}
+                                )   
+                            response_msg = gr.ChatMessage(
+                                    role="assistant",
+                                    content=accumulated_response
+                                )
+                                
+                            # Yield both the completed reasoning AND the growing response
+                            yield [final_reasoning, response_msg]
+                            time.sleep(0.4)
+                        else:
+                            response_msg = gr.ChatMessage(
+                                    role="assistant",
+                                    content=accumulated_response
+                                )
+                    
+                            yield response_msg
+                            time.sleep(0.4)
+                    # Phase 3: Unknown channel
+                    else:
+                        yield chunk 
+
             # CASE B. coroutine -> awaitable to get return result
             else:
                 if inspect.iscoroutine(llm_obj):
@@ -446,10 +491,8 @@ class GradioManager:
                     final_text = text or f"channel {channel}"
                 else:
                     final_text = str(res)
-                messages[-1]["content"] += (final_text or "")
-                yield messages[-1]["content"]
+                yield final_text 
 
-            
         except Exception as e:
             logger.error(f"Error in Gradio handler: {e}")
             yield f"❌ Unexpected error: {str(e)}"
