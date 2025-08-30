@@ -178,4 +178,5 @@ cython_debug/
 videos/
 
 # gradio stuff 
+.gradio
 .gradio/
