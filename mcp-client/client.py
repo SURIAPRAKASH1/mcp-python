@@ -3,7 +3,7 @@ from typing import Optional, Dict, Any, List, Literal, get_args
 
 # Configure logging
 from logging_utils import get_logger
-logger = get_logger(name = __name__, str = "client.log")
+logger = get_logger(name = __name__, log_file = "client.log")
 
 try:
     import asyncio 
