@@ -91,7 +91,7 @@ gradio mcp-server/app.py
 
 ### [Primitives](mcp-server/primitives/):
 
-- Core components of Model Context Protocal. Far now this repo only have implementatoin for [tools].
+- Core components of Model Context Protocal. Far now this repo only have implementation for [tools].
 
 1.  [tools]
 2.  resources
@@ -102,4 +102,4 @@ gradio mcp-server/app.py
 
 #### [tools]:
 
-- Tools are just a **Executable functions** nothing more. So when a LLM's want to use some tool it will give name of that tool and arguments. MCP [client] will take that info about tool to [server], server executes that tool(functions) responded with result, client then give that response to LLM's, now LLM's can continue with it's process. So that means LLM's can't execute any functions by it's OWN it's up to us.
+- Tools are just a **Executable functions** nothing more. So when a LLM's want to use some tool it will give name of that tool and arguments. MCP [client] will take that info about tool to [server], server executes that tool(functions) responded with result, client then give that response to LLM's, now LLM's can continue with it's process. So that means LLM's can't execute any functions by it's OWN it's up to us to take care tool (function) execution.
