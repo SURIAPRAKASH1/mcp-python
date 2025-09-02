@@ -127,12 +127,13 @@ class GradioManager:
         except Exception as e:
             return f"❌ Connection failed: {str(e)}"
 
-    async def _handle_user_messages(self, message: str, history: List[Dict[str, Any]]):
-        """Handle user input via LLM and communicate with MCP client.
+    async def _handle_user_messages(self, message: str, history: List[Dict[str, Any]], model: str):
+        """Process user query by LLM.
         
         Args:
             messages: Current query from an user.
             history: All conversation between User & Assistant.
+            model: Which model should we use?
         """
         if not self.state.mcp_manager:
             yield "⚠️ No MCP server connection. Please connect first."
@@ -156,20 +157,19 @@ class GradioManager:
                 yield "✅ MCP server connected, but no tools available."
                 return
             
-            # Process query and tools via Custom implementation for Google's Models
-            # llm_response = Chat("google").google(self.call_tool,
-            #                                     tool_model="gemini-2.0-flash-lite",
-            #                                     response_model= "gemma-3n-e4b-it", 
-            #                                     messages= messages, 
-            #                                     tools= tools
-            #                                 )
-            # return llm_response      
-                    
-            llm_obj = Chat("notebook").custom(
-                call_tool= self.call_tool, 
-                messages= messages, 
-                tools = tools, 
-            )
+            if model in ["gemini-2.0-flash-lite"]:
+                logger.info("User Selected Model %s. Process with Google models Implementation", model)
+                llm_obj = Chat("google").google
+            elif model == "gpt-oss-20b": 
+                logger.info("User Selected Model %s. Process with NoteBook Implementation", model)
+                llm_obj = Chat("notebook").custom(
+                    call_tool= self.call_tool, 
+                    messages= messages, 
+                    tools = tools, 
+                )
+            else:
+                yield f"❌ Unknown Model {model}"
+                return
 
             # CASE A. async generator -> iterate and yield
             current_reasoning = ""
@@ -264,7 +264,13 @@ class GradioManager:
                     res = await llm_obj
                 else:
                     # CASE C. Just synchronous -> run in thread to avoid blocking eventloop
-                    res = await asyncio.to_thread(llm_obj)
+                    res = await asyncio.to_thread(llm_obj,
+                                                  call_tool =self.call_tool,
+                                                  tool_model= model,
+                                                  response_model= model, 
+                                                  messages= messages, 
+                                                  tools= tools
+                                                )
 
                 # interpret result
                 if isinstance(res, tuple) and len(res) == 2:
@@ -313,7 +319,17 @@ class GradioManager:
             gr.ChatInterface(
                     fn= self._handle_user_messages,
                     type="messages",
-                    chatbot=gr.Chatbot(height=500, type= "messages")
+                    chatbot=gr.Chatbot(height=500, type= "messages"), 
+                    additional_inputs_accordion= "Model",
+                    additional_inputs= [
+                        {
+                            "name": "dropdown", 
+                            "choices": ["gpt-oss-20b", "gemini-2.0-flash-lite"], 
+                            "show_label": False, 
+                            "container": False,
+                            "value": "gemini-2.0-flash-lite"
+                        }
+                    ]
             )
 
         return interface
