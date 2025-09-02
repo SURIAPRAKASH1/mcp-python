@@ -53,7 +53,7 @@ class Chat:
                tool_model: str,
                response_model: Optional[str],
                messages: List[dict[str, Any]], 
-               tools: List[dict[str, Any]]) -> str:
+               tools: List[dict[str, Any]]):
         """Processing messages and tools via Google Models.
 
         Args:
@@ -90,15 +90,23 @@ class Chat:
                     )
                 )
             else:
-                raise NotImplementedError(message) 
+                return f"✖ Unexpected field '{message.get("role")}' in messages"
+                 
 
        # Call model with function declaration 
-        response = self.client.models.generate_content(
-            model = tool_model,
-            contents= contents, 
-            config= config
-        )
-
+        try:
+            response = self.client.models.generate_content(
+                model = tool_model,
+                contents= contents, 
+                config= config
+            )
+        except httpx.HTTPStatusError as exc:
+            return f"❌ HTTP Error: {exc.response.status_code}, {exc}"
+        except httpx.RequestError as exc:
+            return f"❌ Request error: {exc}"
+        except Exception as exc:
+            return f"❌ Unexpected error: {exc}" 
+            
         final_text = [] 
         function_response_parts = []
 
@@ -119,7 +127,7 @@ class Chat:
                 print(f"Calling function {tool_name} with args {tool_args}")
                 tool_call_response = call_tool(params = {"tool_name": tool_name, "arguments": tool_args}, timeout = 30)
                 if tool_call_response['error']:
-                    return  f"❌ Error When calling tool {tool_name} with arguments {tool_args}: \n{tool_call_response}"
+                    return f"❌ Error When calling tool {tool_name} with arguments {tool_args}: \n{tool_call_response}"
                 # Wrap it as a Part so the LLM can later consume it
                 part = types.Part.from_function_response(
                     name= tool_name,
@@ -136,11 +144,18 @@ class Chat:
             )
 
             # Again invoke model with results of function
-            final_response = self.client.models.generate_content(
-                model = response_model or tool_model , 
-                # config = config, 
-                contents = contents
-            )
+            try:
+                final_response = self.client.models.generate_content(
+                    model = response_model or tool_model , 
+                    # config = config, 
+                    contents = contents
+                )
+            except httpx.HTTPStatusError as exc:
+                return f"❌ HTTP Error: {exc.response.status_code}, {exc}"
+            except httpx.RequestError as exc:
+                return f"❌ Request error: {exc}"
+            except Exception as exc:
+                return f"❌ Unexpected error: {exc}" 
 
             final_text.append(final_response.text)
 
