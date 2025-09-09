@@ -4,6 +4,29 @@ Model Context Protocal Implemenation in Pythonic way. It's simple project that e
 
 ---
 
+# Setup
+
+### 1. Install uv
+
+This project uses [uv](https://github.com/astral-sh/uv) for dependency management. Make sure you have `uv` installed:
+
+### 2. Install dependencies
+
+From the project root, run:
+
+```bash
+uv sync --project mcp-client
+uv sync --project mcp-python
+```
+
+This will install all dependencies as specified in each subproject’s `uv.lock` file.
+
+### 3.Pitfall's:
+
+- If you ran into any of the bug's after installation everything will tracked in `.log` file's. So don't worry about breaking the project 🥚, just do and learn from it 👍.
+
+---
+
 # Content 📃:
 
 Am just walking through project's Structure and Explaning what it is ?, How's it used ?, In the universe of MCP. How can be used is up to YOU 👊.
@@ -15,21 +38,21 @@ Am just walking through project's Structure and Explaning what it is ?, How's it
 - An application/UI; Anyone (end-user) can interact with. Gradio act as a host. Host is the one contains client & model as in it's top layer.
 - Run one any of the $\downarrow$ command to spin up the host. Change `.../server.py` to match absolute path of mcp server. It will create [gradio] and [client] then [client] will launch [server] as subprocess over **stdio**.
 
-```
+```bash
 uv run mcp-client/host.py --server_command python .../server.py
 ```
 
-```
+```bash
 python mcp-client/host.py --server_command python .../server.py
 ```
 
 - Run any one of the $\downarrow$ command to spin up host. It's for client to communicate with streamable-http server. Change `your_mcp_server_url` with actuall url of mcp-server
 
-```
+```bash
 uv run mcp-client/host.py --streamablehttp_url your_mcp_server_url
 ```
 
-```
+```bash
 python mcp-client/host.py --streamablehttp_url your_mcp_server_url
 ```
 
@@ -51,7 +74,7 @@ python mcp-client/host.py --streamablehttp_url your_mcp_server_url
 
 - To launch streamable-http server in locally run;
 
-```
+```bash
     python mcp-server/server.py --transport streamable-http
 ```
 
@@ -61,29 +84,29 @@ python mcp-client/host.py --streamablehttp_url your_mcp_server_url
 
 - To launch gradio mcp server on locally just simply run one of the $\downarrow$ command,
 
-```
+```bash
 python mcp-server/app.py
 ```
 
-```
+```bash
 gradio mcp-server/app.py
 ```
 
 - To push **gradio mcp server** to huggingface 🤗 space follow $\downarrow$ commands,
 
-  ```
+  ```bash
   git remote add space https://huggingface.co/spaces/huggingface-name/space-name
   ```
 
   - To add remote space. Change `space-name` to Your actuall space name and `huggingface-name` to User name of huggingface account.
 
-  ```
+  ```bash
   git subtree --prefix=mcp-server -b mcp-server-space
   ```
 
   - This will create new branch named **mcp-server-space** (it's just a branch name change to what ever you want) with only content of [mcp-server](/mcp-server).
 
-  ```
+  ```bash
   git push space mcp-server-space:main --force
   ```
 
