@@ -13,7 +13,6 @@ try:
     from bs4 import BeautifulSoup 
     import httpx 
     import gradio as gr
-    import asyncio
 except ImportError as e:
     logger.error("Got Error when Importing Packages: \n%s", e) 
     sys.exit(1) 
@@ -28,7 +27,7 @@ BASE_CRICKET_URL = os.environ.get("BASE_CRICKET_URL")
 logger.warning("Env variable BASE_CRICKET_URL Not-Found may cause error...") if not BASE_CRICKET_URL else logger.info("")
 
 # PR template directory 
-TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
+TEMPLATES_DIR = Path(__file__).parent.parent.parent / ".github/PULL_REQUEST_TEMPLATE" or Path(__file__).parent.parent / "templates"
 logger.warning("TEMPLATES_DIR Not-Found may cause Error...") if not TEMPLATES_DIR else logger.info("TEMPLATES_DIR: \n%s", TEMPLATES_DIR)
 
 # Default PR templates
