@@ -1,11 +1,12 @@
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Union
 import json, re
+import ast 
 
 class Formatter:
     "Utily class for Formatting LoT"
 
-    @classmethod
-    def prepare_chat_messages(cls, message: str, history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    @staticmethod
+    def prepare_chat_messages(message: str, history: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Prepares User and Assistant chat history in a structure way"""
 
         # History of user - assistant chat
@@ -22,8 +23,8 @@ class Formatter:
         messages.append({"role": "user", "content": message})
         return messages
 
-    @classmethod
-    def prepare_default_tool_definition(cls, tool_definition: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    @staticmethod
+    def prepare_default_tool_definition(tool_definition: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         """Prepares Default Tool Definition in Structure Way.
 
         Args:
@@ -37,7 +38,7 @@ class Formatter:
 
         return tools
     
-    @classmethod
+    @staticmethod
     def format_table_content(table_buffer: str) -> str:
         """
         Format table content for better display.
@@ -65,6 +66,7 @@ class Formatter:
         else:
             return table_buffer + "\n"
 
+    @staticmethod
     def is_table_start(chunk: str) -> bool:
         """Detect various table format beginnings."""
         # Look for markdown table, HTML table, fenced code block, or JSON markers
@@ -75,6 +77,7 @@ class Formatter:
             (chunk.strip().startswith('[') and '{' in chunk) or \
             (chunk.strip().startswith('{') and '"' in chunk)
 
+    @staticmethod
     def is_table_end(buffer: str, last_chunk: str) -> bool:
         """Determine when a table is complete using various heuristics."""
         
@@ -103,3 +106,40 @@ class Formatter:
                 pass
         
         return False
+
+    @staticmethod
+    def tool_parser(tool_rep: Any)-> Union[str, List[Dict]]:
+        """Given tool declaration checks it's valid List[Dict] format, if so return as List[Dict]"""
+        
+        def parse_structured_input(value: Any)-> Union[str, List[Dict]]:
+            # 1) already parsed
+            if isinstance(value, (list, dict)):
+                return value
+
+            if not isinstance(value, str):
+                return TypeError("unexpected input type")
+
+            s = value.strip()
+            # 2) try strict JSON first
+            try:
+                return json.loads(s)
+            except Exception:
+                pass
+
+            # 3) try Python literal (safe-ish)
+            try:
+                return ast.literal_eval(s)
+            except Exception:
+                pass
+
+            # 4) last attempt: replace single quotes -> double quotes then JSON
+            try:
+                return json.loads(s.replace("'", '"'))
+            except Exception as e:
+                return ValueError(f"could not parse input as JSON or Python literal: {e}")
+        
+        parsed = parse_structured_input(tool_rep)
+        if isinstance(parsed, (list, dict)):
+            return parsed
+        else:
+            return parsed.__str__()
