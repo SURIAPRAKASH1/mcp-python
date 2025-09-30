@@ -104,3 +104,26 @@ def custom_definition(mcp_definition: dict)-> dict:
         cus_def["function"]["parameters"]["required"].append(prop_name)
 
     return cus_def
+
+
+def topk_tool_definition(tools: list[dict], topk_tools: list[dict]) -> list[dict]:
+    """
+    Filters the main tools list to include only those present in the topk_tools list.
+
+    Args:
+        tools: A list of dictionaries representing the full tool declarations.
+        topk_tools: A list of dictionaries, each containing the 'name' and 'description'
+                    of a top-k tool.
+
+    Returns:
+        A list of dictionaries containing the full tool declarations for the tools
+        present in topk_tools.
+    """
+    # Create a dictionary of tools for efficient lookup by name
+    tools_dict = {tool['name']: tool for tool in tools}
+
+    # Filter the main tools list by iterating through topk_tools and looking up in tools_dict
+    filtered_tools = [tools_dict[tool['name']] for tool in topk_tools if tool['name'] in tools_dict]
+
+    return filtered_tools
+
