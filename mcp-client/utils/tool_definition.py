@@ -119,6 +119,8 @@ def topk_tool_definition(tools: list[dict], topk_tools: list[dict]) -> list[dict
         A list of dictionaries containing the full tool declarations for the tools
         present in topk_tools.
     """
+    if not (isinstance(tools, (list, dict)) or isinstance(topk_tools, (list, dict))):
+        return "💀 Full tool declaration or Topk tools declaration is not valid format(list(dict))."
     # Create a dictionary of tools for efficient lookup by name
     tools_dict = {tool['name']: tool for tool in tools}
 
