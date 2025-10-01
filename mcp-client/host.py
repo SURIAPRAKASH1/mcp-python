@@ -12,6 +12,8 @@ try:
     import gradio as gr 
     from utils.models import Chat
     from utils.format import Formatter
+    from utils.tool_selector import select_relevant_tools
+    from utils.tool_definition import topk_tool_definition
     from client import MCPClientManager
 
     from dotenv import load_dotenv
@@ -21,7 +23,7 @@ except ImportError:
     sys.exit(1)
     
 STREAMABLEHTTP_SERVER_URL = os.environ.get("STREAMABLEHTTP_SERVER_URL", "False")
-
+TOOL_SELECTOR_MCP_URL = os.environ.get("TOOL_SELECTOR_MCP_URL", "False")
 
 # Mutuble container to Hold current app state
 class AppState:
@@ -153,9 +155,20 @@ class GradioManager:
             messages = Formatter.prepare_chat_messages(message, history)
             tools = Formatter.prepare_default_tool_definition(response["result"])
 
+            # Only include topk tools to LLM's context 
+            if TOOL_SELECTOR_MCP_URL != "False":
+                topk_tools = await select_relevant_tools(url= TOOL_SELECTOR_MCP_URL,
+                                                    query= message,
+                                                    tools_list= tools)
+                tools = topk_tool_definition(tools, topk_tools)
+
             if not tools:
                 yield "✅ MCP server connected, but no tools available."
                 return
+            
+            if not isinstance(tools, (list, dict)):
+                yield f"{tools}"
+                return 
             
             if model in ["gemini-2.0-flash-lite"]:
                 logger.info("User Selected Model %s. Process with Google models Implementation", model)
